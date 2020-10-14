@@ -16,7 +16,6 @@ void freeLineArray(LineArray* array)
 
 void writeLineArray(LineArray* lineArray, int byteOffset, int line)
 {
-
     if (lineArray->capacity < lineArray->count + 1)
     {
         int oldCapacity = lineArray->capacity;
@@ -24,7 +23,7 @@ void writeLineArray(LineArray* lineArray, int byteOffset, int line)
         lineArray->array = GROW_ARRAY(Line, lineArray->array, oldCapacity, lineArray->capacity);
     }
 
-    if (lineArray->array[lineArray->count - 1].line == line)
+    if (lineArray->count > 0 && lineArray->array[lineArray->count - 1].line == line)
     {
         lineArray->array[lineArray->count - 1].endingByteOffset = byteOffset;
     }
@@ -32,9 +31,9 @@ void writeLineArray(LineArray* lineArray, int byteOffset, int line)
     {
        lineArray->array[lineArray->count].line = line; 
        lineArray->array[lineArray->count].endingByteOffset = byteOffset; 
+       lineArray->count++;
     }
 
-    lineArray->count++;
 }
 
 Line getLine(LineArray* lineArray, int byteOffset)

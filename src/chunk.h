@@ -7,10 +7,21 @@
 #include "line.h"
 
 typedef enum {
-    OP_RETURN,
     OP_CONSTANT,
+    OP_NIL,
+    OP_TRUE,
+    OP_FALSE,
+    OP_EQUAL,
+    OP_GREATER,
+    OP_LESS,
+    OP_NEGATE,
+    OP_ADD,
+    OP_SUBSTRACT,
+    OP_MULTIPLY,
+    OP_DIVIDE,
+    OP_NOT,
+    OP_RETURN,
 } OpCode;
-
 
 
 typedef struct {
@@ -18,7 +29,7 @@ typedef struct {
     int capacity;
     uint8_t* code;
     ValueArray constants;
-    LineArray *lines;
+    LineArray lines;
 } Chunk;
 
 
