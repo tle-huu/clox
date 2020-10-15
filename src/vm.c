@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
-
+#include <time.h>
 
 VM vm;
 
@@ -204,13 +204,10 @@ static InterpretResult run()
         }
     }
 
-
 #undef READ_BYTE
 #undef READ_CONSTANT
 #undef READ_STRING
 #undef BINARY_OP
-
-
 }
 
 InterpretResult interpret(const char* source)
@@ -218,15 +215,21 @@ InterpretResult interpret(const char* source)
     Chunk chunk;
     initChunk(&chunk);
 
+    clock_t begin = clock();
     if (!compile(source, &chunk))
     {
         return INTERPRET_COMPILE_ERROR;
     }
+    clock_t end = clock();
+    printf("Compile time: %f seconds\n", (double)(end - begin) / CLOCKS_PER_SEC);
 
     vm.chunk = &chunk;
     vm.ip = vm.chunk->code;
 
+    begin = clock();
     InterpretResult result = run();
+    end = clock();
+    printf("Run time: %f seconds\n", (double)(end - begin) / CLOCKS_PER_SEC);
     freeChunk(&chunk);
     return result;
 }
