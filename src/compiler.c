@@ -9,13 +9,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-typedef struct
-{
-    Token current;
-    Token previous;
-    bool hadError;
-    bool panicMode;
-} Parser;
 
 typedef enum
 {
@@ -44,6 +37,23 @@ typedef struct
 Parser parser;
 
 Chunk* compilingChunk;
+
+static int tokenToIndex(Token* token)
+{
+    int index = parser.globals.count;
+    ObjString* key = copyString(token->start, token->length);
+    Value value;
+    if (tableGet(&parser.globals, key, &value))
+    {
+        index = AS_INDEX(value);
+    }
+    else
+    {
+        tableSet(&parser.globals, key, INDEX_VAL(parser.globals.count));
+    }
+    return index;
+
+}
 
 static Chunk* currentChunk()
 {
@@ -241,16 +251,19 @@ static void string(bool canAssign)
 
 static void namedVariable(Token name, bool canAssign)
 {
-    int index = makeIdentifierConstant(&parser.previous);
+
+    int nameIndex = tokenToIndex(&name);
+
+    int constantIndex = makeConstant(INDEX_VAL(nameIndex));
 
     if (canAssign && match(TOKEN_EQUAL))
     {
         expression();
-        emitBytes(OP_SET_GLOBAL, index);
+        emitBytes(OP_SET_GLOBAL, constantIndex);
     }
     else
     {
-        emitBytes(OP_GET_GLOBAL, index);
+        emitBytes(OP_GET_GLOBAL, constantIndex);
     }
 }
 
@@ -388,7 +401,10 @@ static void defineVariable(uint8_t global)
 static uint8_t parseVariable(const char* message)
 {
     consume(TOKEN_IDENTIFIER, message);
-    return makeIdentifierConstant(&parser.previous);
+
+    int index = tokenToIndex(&parser.previous);
+
+    return makeConstant(INDEX_VAL(index));
 }
 
 static void varDeclaration()

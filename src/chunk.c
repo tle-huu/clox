@@ -47,6 +47,17 @@ int addConstant(Chunk* chunk, Value value)
             }
         }
     }
+    else if (IS_INDEX(value))
+    {
+        for (int i = 0; i < chunk->constants.count; ++i)
+        {
+            Value* values = chunk->constants.values;
+            if (IS_INDEX(values[i]) && AS_INDEX(values[i]) == AS_INDEX(value))
+            {
+                return i;
+            }
+        }   
+    }
     writeValueArray(&chunk->constants, value);
     return chunk->constants.count - 1;
 }

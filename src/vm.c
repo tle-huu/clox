@@ -20,12 +20,67 @@ static void resetStack()
     vm.stackTop = vm.stack;
 }
 
+static const char* getGlobalName(int index)
+{
+    Entry* entries = parser.globals.entries;
+    for (int i = 0; i < parser.globals.capacity; ++i)
+    {
+        if (entries[i].key != NULL && AS_INDEX(entries[i].value) == index)
+        {
+            return entries[i].key->chars;
+        }
+    }
+    return NULL;
+}
+
+static void initGlobals()
+{
+    initValueArray(&vm.globals);
+}
+
+static bool setGlobal(int index, Value value)
+{
+    if (vm.globals.capacity <= index)
+    {
+        int oldCapacity = vm.globals.capacity;
+        vm.globals.capacity = GROW_CAPACITY(index);
+        vm.globals.values = GROW_ARRAY(Value, vm.globals.values, oldCapacity, vm.globals.capacity);
+        for (int i = oldCapacity; i < vm.globals.capacity; ++i)
+        {
+            vm.globals.values[i] = NIL_VAL;
+        }
+    }
+
+    bool isNew = false;
+    if (IS_NIL(vm.globals.values[index]))
+    {
+        vm.globals.count++;
+        isNew = true;
+    }
+    vm.globals.values[index] = value;
+    return isNew;
+}
+
+static bool getGlobal(int index, Value* value)
+{
+    if (index >= vm.globals.capacity || IS_NIL(vm.globals.values[index])) return false;
+
+    *value = vm.globals.values[index];
+    return true;
+}
+
+static void deleteGlobal(int index)
+{
+    vm.globals.values[index] = NIL_VAL;
+}
+
 void initVM()
 {
     resetStack();
     initTable(&vm.strings);
-    initTable(&vm.globals);
-vm.objects = NULL;
+    // initTable(&vm.globals);
+    initGlobals();
+    vm.objects = NULL;
 }
 
 
@@ -46,6 +101,7 @@ Value pop()
     vm.stackTop--;
     return *vm.stackTop;
 }
+
 
 static void runtimeError(const char* format, ...)
 {
@@ -88,6 +144,7 @@ static InterpretResult run()
 #define READ_BYTE() (*vm.ip++)
 #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
 #define READ_STRING() AS_STRING(READ_CONSTANT())
+#define READ_INDEX() AS_INDEX(READ_CONSTANT())
 #define BINARY_OP(valueType, op) \
         do { \
             if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) { \
@@ -171,26 +228,27 @@ static InterpretResult run()
                 printf("\n");
                 return INTERPRET_OK;
             case OP_DEFINE_GLOBAL: {
-                ObjString* name = READ_STRING();
-                tableSet(&vm.globals, name, peek(0));
+                int index = READ_INDEX();
+                setGlobal(index, peek(0));
                 pop();
                 break;
             }
             case OP_SET_GLOBAL: {
-                ObjString* name = READ_STRING();
-                if (tableSet(&vm.globals, name, peek(0))) {
-                    tableDelete(&vm.globals, name);
-                    runtimeError("Undefined global variable '%s'.", name->chars);
+                int index = READ_INDEX();
+                if (setGlobal(index, peek(0)))
+                {
+                    deleteGlobal(index);
+                    runtimeError("Undefined global variable '%s'.", getGlobalName(index));
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 break;
             }
             case OP_GET_GLOBAL: {
-                ObjString* name = READ_STRING();
+                int index = READ_INDEX();
                 Value value;
-                bool exists = tableGet(&vm.globals, name, &value);
+                bool exists = getGlobal(index, &value);
                 if (!exists) {
-                    runtimeError("Undefined global variable '%s'.", name->chars);
+                    runtimeError("Undefined global variable '%s'.", getGlobalName(index));
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 push(value);
