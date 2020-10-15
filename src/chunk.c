@@ -36,7 +36,18 @@ void freeChunk(Chunk* chunk)
 
 int addConstant(Chunk* chunk, Value value)
 {
-   writeValueArray(&chunk->constants, value);
-   return chunk->constants.count - 1;
+    if (IS_STRING(value))
+    {
+        for (int i = 0; i < chunk->constants.count; ++i)
+        {
+            Value* values = chunk->constants.values;
+            if (IS_STRING(values[i]) && AS_STRING(values[i]) == AS_STRING(value))
+            {
+                return i;
+            }
+        }
+    }
+    writeValueArray(&chunk->constants, value);
+    return chunk->constants.count - 1;
 }
 

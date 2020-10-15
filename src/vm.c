@@ -1,5 +1,6 @@
 #include "common.h"
 #include "compiler.h"
+#include "memory.h"
 #include "vm.h"
 #include "value.h"
 
@@ -9,6 +10,8 @@
 
 #include <stdio.h>
 #include <stdarg.h>
+#include <string.h>
+
 
 VM vm;
 
@@ -20,12 +23,16 @@ static void resetStack()
 void initVM()
 {
     resetStack();
+    initTable(&vm.strings);
+    initTable(&vm.globals);
+vm.objects = NULL;
 }
 
 
 void freeVM()
 {
-
+    freeTable(&vm.strings);
+    freeObjects();
 }
 
 void push(Value value)
@@ -65,10 +72,22 @@ static bool isFalsey(Value value)
     return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
 }
 
+static void concatenate()
+{
+    ObjString* b = AS_STRING(pop());
+    ObjString* a = AS_STRING(pop());
+
+    ObjString* string = concatenateStrings(a, b);
+
+    push(OBJ_VAL(string));
+
+}
+
 static InterpretResult run()
 {
 #define READ_BYTE() (*vm.ip++)
 #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
+#define READ_STRING() AS_STRING(READ_CONSTANT())
 #define BINARY_OP(valueType, op) \
         do { \
             if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) { \
@@ -110,7 +129,27 @@ static InterpretResult run()
                 }
                 push(NUMBER_VAL(-AS_NUMBER(pop())));
                 break;
-            case OP_ADD      : BINARY_OP(NUMBER_VAL, +); break; 
+            case OP_ADD      : {
+
+                if (IS_STRING(peek(0)) && IS_STRING(peek(1)))
+                {
+                    concatenate();
+                }
+                else if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1)))
+                {
+                    double b = AS_NUMBER(pop());
+                    double a = AS_NUMBER(pop());
+                    push(NUMBER_VAL(a + b));
+                }
+                else
+                {
+                    runtimeError("Operants must be two numbers or two strings.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                break; 
+            }
+
             case OP_SUBSTRACT: BINARY_OP(NUMBER_VAL, -); break;
             case OP_MULTIPLY : BINARY_OP(NUMBER_VAL, *); break;
             case OP_DIVIDE   : BINARY_OP(NUMBER_VAL, /); break;
@@ -126,9 +165,40 @@ static InterpretResult run()
                 push(BOOL_VAL(valuesEqual(a, b)));
                 break;
             }
-            case OP_RETURN   :
+            case OP_POP      : pop(); break;
+            case OP_PRINT:
                 printValue(pop());
                 printf("\n");
+                return INTERPRET_OK;
+            case OP_DEFINE_GLOBAL: {
+                ObjString* name = READ_STRING();
+                tableSet(&vm.globals, name, peek(0));
+                pop();
+                break;
+            }
+            case OP_SET_GLOBAL: {
+                ObjString* name = READ_STRING();
+                if (tableSet(&vm.globals, name, peek(0))) {
+                    tableDelete(&vm.globals, name);
+                    runtimeError("Undefined global variable '%s'.", name->chars);
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                break;
+            }
+            case OP_GET_GLOBAL: {
+                ObjString* name = READ_STRING();
+                Value value;
+                bool exists = tableGet(&vm.globals, name, &value);
+                if (!exists) {
+                    runtimeError("Undefined global variable '%s'.", name->chars);
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                push(value);
+                break;
+
+            }
+            case OP_RETURN   :
+                // Exit interpreter
                 return INTERPRET_OK;
                
         }
@@ -137,7 +207,9 @@ static InterpretResult run()
 
 #undef READ_BYTE
 #undef READ_CONSTANT
+#undef READ_STRING
 #undef BINARY_OP
+
 
 }
 
