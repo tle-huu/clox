@@ -9,6 +9,7 @@
 #endif
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
 #include <time.h>
@@ -18,33 +19,6 @@ VM vm;
 static void resetStack()
 {
     vm.stackTop = vm.stack;
-}
-
-void initVM()
-{
-    resetStack();
-    initTable(&vm.strings);
-    initTable(&vm.globals);
-vm.objects = NULL;
-}
-
-
-void freeVM()
-{
-    freeTable(&vm.strings);
-    freeObjects();
-}
-
-void push(Value value)
-{
-    *vm.stackTop = value;
-    ++vm.stackTop;
-}
-
-Value pop()
-{
-    vm.stackTop--;
-    return *vm.stackTop;
 }
 
 static void runtimeError(const char* format, ...)
@@ -61,6 +35,39 @@ static void runtimeError(const char* format, ...)
 
     resetStack();
 }
+
+void initVM()
+{
+    resetStack();
+    initTable(&vm.strings);
+    initTable(&vm.globals);
+    vm.objects = NULL;
+}
+
+void freeVM()
+{
+    freeTable(&vm.strings);
+    freeObjects();
+}
+
+void push(Value value)
+{
+    if (vm.stackTop == vm.stack + STACK_MAX - 1)
+    {
+        runtimeError("FATAL: Stack overflow.");
+        exit(42);
+    }
+    *vm.stackTop = value;
+    ++vm.stackTop;
+
+}
+
+Value pop()
+{
+    vm.stackTop--;
+    return *vm.stackTop;
+}
+
 
 static Value peek(int distance)
 {
@@ -88,6 +95,8 @@ static InterpretResult run()
 #define READ_BYTE() (*vm.ip++)
 #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
 #define READ_STRING() AS_STRING(READ_CONSTANT())
+#define READ_SHORT()\
+    (vm.ip += 2, (uint16_t)((vm.ip[-2] << 8) | vm.ip[-1]))
 #define BINARY_OP(valueType, op) \
         do { \
             if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) { \
@@ -102,6 +111,7 @@ static InterpretResult run()
 
     while (true)
     {
+        // sleep(1);
     #ifdef DEBUG_TRACE_EXECUTION
         printf("          ");
         for (Value* slot = vm.stack; slot < vm.stackTop; ++slot)
@@ -169,7 +179,7 @@ static InterpretResult run()
             case OP_PRINT:
                 printValue(pop());
                 printf("\n");
-                return INTERPRET_OK;
+                break;
             case OP_DEFINE_GLOBAL: {
                 ObjString* name = READ_STRING();
                 tableSet(&vm.globals, name, peek(0));
@@ -197,6 +207,31 @@ static InterpretResult run()
                 break;
 
             }
+            case OP_GET_LOCAL: {
+                uint8_t slot = READ_BYTE();
+                push(vm.stack[slot]);
+                break;
+            }
+            case OP_SET_LOCAL: {
+                uint8_t slot = READ_BYTE();
+                vm.stack[slot] = peek(0);
+                break;
+            }
+            case OP_JUMP_IF_FALSE: {
+                uint16_t offset = READ_SHORT();
+                if (isFalsey(peek(0))) vm.ip += offset;
+                break;
+            }
+            case OP_JUMP: {
+                uint16_t offset = READ_SHORT();
+                vm.ip += offset;
+                break;   
+            }
+            case OP_LOOP: {
+                uint16_t offset = READ_SHORT();
+                vm.ip -= offset;
+                break;
+            }
             case OP_RETURN   :
                 // Exit interpreter
                 return INTERPRET_OK;
@@ -207,6 +242,7 @@ static InterpretResult run()
 #undef READ_BYTE
 #undef READ_CONSTANT
 #undef READ_STRING
+#undef READ_SHORT
 #undef BINARY_OP
 }
 

@@ -23,8 +23,13 @@ typedef enum {
     OP_NOT,
     OP_POP,
     OP_DEFINE_GLOBAL,
+    OP_JUMP_IF_FALSE,
+    OP_JUMP,
+    OP_LOOP,
     OP_GET_GLOBAL,
     OP_SET_GLOBAL,
+    OP_GET_LOCAL,
+    OP_SET_LOCAL,
     OP_RETURN,
 } OpCode;
 

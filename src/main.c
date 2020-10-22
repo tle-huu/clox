@@ -39,7 +39,7 @@ static char* readFile(const char* path)
     size_t fileSize = ftell(file);
     rewind(file);
 
-    char *source = (char*)malloc(fileSize);
+    char *source = (char*)malloc(fileSize + 1);
     if (source == NULL)
     {
         fprintf(stderr, "Not enough memory to read \"%s\".\n", path);
