@@ -11,7 +11,7 @@
     (type*)allocateObject(rawSize, objectType)
 
 #define ALLOCATE_OBJ(type, objectType) \
-    ALLOCATE_OBJ_SIZE(type, sizeof(objectType), objectType)
+    ALLOCATE_OBJ_SIZE(type, sizeof(type), objectType)
 
 static Obj* allocateObject(size_t size, ObjType type)
 {
@@ -44,6 +44,18 @@ static ObjString* allocateString(int length, uint32_t hash)
     return string;
 }
 
+ObjFunction* newFunction()
+{
+    ObjFunction* function = ALLOCATE_OBJ(ObjFunction, OBJ_FUNCTION);
+
+    function->arity = 0;
+    function->obj.type = OBJ_FUNCTION;
+    function->name = NULL;
+    initChunk(&function->chunk);
+    return function;
+
+}
+
 ObjString* copyString(const char* chars, int length)
 {
     uint32_t hash = hashString(chars, length);
@@ -53,7 +65,7 @@ ObjString* copyString(const char* chars, int length)
     if (interned != NULL) return interned;
 
     ObjString* string = allocateString(length, hash);
-    memcpy(string->chars, chars, length);
+    memcpy(string->chars, chars, length + 1);
     string->chars[length] = 0;
     return string;
 }
@@ -75,6 +87,18 @@ ObjString* concatenateStrings(const ObjString* a, const ObjString* b)
     return string;
 }
 
+void printFunction(ObjFunction* function)
+{
+    if (function->name == NULL)
+    {
+        printf("<script>");
+    }
+    else
+    {
+        printf("<fn %s>", function->name->chars);
+    }
+}
+
 void printObject(Obj* object)
 {
     switch (object->type)
@@ -82,8 +106,9 @@ void printObject(Obj* object)
         case OBJ_STRING:
             printf("%s", ((ObjString*)object)->chars);
             break;
-        default:
-            return;
+        case OBJ_FUNCTION:
+            printFunction((ObjFunction*)object);
+            break;
     }
 }
 
@@ -99,5 +124,8 @@ bool objsEqual(Obj* a, Obj* b)
             return aString->length == bString->length &&
                 strncmp(aString->chars, bString->chars, aString->length) == 0;
         }
+        case OBJ_FUNCTION:
+            return false;
+            break;
     }   
 }

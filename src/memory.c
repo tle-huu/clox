@@ -21,26 +21,34 @@ void* reallocate(void* pointer, int oldSize, int newSize)
 
 static void freeObject(Obj* object)
 {
-	static int i = 0;
-	switch (object->type)
-	{
-		case OBJ_STRING: {
-			ObjString* string = (ObjString*)object;
-			FREE(ObjString, object);
-			break;
-		}
+    switch (object->type)
+    {
+        case OBJ_STRING: {
+            ObjString* string = (ObjString*)object;
+            FREE(ObjString, string);
+            break;
+        }
+        case OBJ_FUNCTION: {
+            // write(1, "DLRDLRLDR\n", 10);
+            ObjFunction* function = (ObjFunction*)object;
+            // printf("dlr xxx => [%s]\n", function->name ? function->name->chars : "SCRIPTZER");
+            // printf("dlr xx arity =>[%d]\n", function->arity);
+            freeChunk(&function->chunk);
+            FREE(ObjFunction, function);
+            break;
+        }
 
-	}
+    }
 }
 
 void freeObjects()
 {
-	Obj* object = vm.objects;
+    Obj* object = vm.objects;
 
-	while (object)
-	{
-		Obj* next = object->next;
-		freeObject(object);
-		object = next;
-	}
+    while (object)
+    {
+        Obj* next = object->next;
+        freeObject(object);
+        object = next;
+    }
 }
