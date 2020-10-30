@@ -63,10 +63,10 @@ static Value peek(int distance)
     return vm.stackTop[-1 - distance];
 }
 
-static void defineNative(const char* name, NativeFn function)
+static void defineNative(const char* name, NativeFn function, int arity)
 {
     push(OBJ_VAL(copyString(name, (int)strlen(name))));
-    push(OBJ_VAL(newNative(function)));
+    push(OBJ_VAL(newNative(function, arity)));
     tableSet(&vm.globals, AS_STRING(peek(1)), peek(0));
     pop();
     pop();
@@ -79,7 +79,7 @@ void initVM()
     initTable(&vm.globals);
     vm.objects = NULL;
 
-    defineNative("clock", clockNative);
+    defineNative("clock", clockNative, 0);
 }
 
 void freeVM()
@@ -155,8 +155,20 @@ static bool callValue(Value callee, int argCount)
             case OBJ_FUNCTION:
                 return call(AS_FUNCTION(callee), argCount);
             case OBJ_NATIVE: {
+                int arity = ((ObjNative*)AS_OBJ(callee))->arity;
                 NativeFn native = AS_NATIVE(callee);
+                if (argCount != arity)
+                {
+                    runtimeError("Expect %d arguments but %d were given\n", arity, argCount);
+                    return false;
+                }
                 Value result = native(argCount, vm.stackTop - argCount);
+
+                if (IS_NATIVE_ERROR(result))
+                {
+                    runtimeError(AS_CSTRING(result));
+                    return false;
+                }
                 vm.stackTop -= argCount + 1;
                 push(result);
                 return true;
@@ -175,11 +187,13 @@ static InterpretResult run()
 {
     CallFrame* frame = &vm.frames[vm.frameCount - 1];
 
-#define READ_BYTE() (*frame->ip++)
+    register uint8_t* instruction_pointer = frame->ip;
+
+#define READ_BYTE() (*instruction_pointer++)
 #define READ_CONSTANT() (frame->function->chunk.constants.values[READ_BYTE()])
 #define READ_STRING() AS_STRING(READ_CONSTANT())
 #define READ_SHORT()\
-    (frame->ip += 2, (uint16_t)((frame->ip[-2] << 8) | frame->ip[-1]))
+    (instruction_pointer += 2, (uint16_t)((instruction_pointer[-2] << 8) | instruction_pointer[-1]))
 #define BINARY_OP(valueType, op) \
         do { \
             if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) { \
@@ -190,6 +204,7 @@ static InterpretResult run()
             double a = AS_NUMBER(pop()); \
             push(valueType(a op b)); \
         } while (false)
+#define RESTORE_IP() frame->ip = instruction_pointer
 
 
     while (true)
@@ -204,7 +219,7 @@ static InterpretResult run()
             printf(" ]");
         }
         printf("\n");
-        disassembleInstruction(&frame->function->chunk, (int)(frame->ip - frame->function->chunk.code));
+        disassembleInstruction(&frame->function->chunk, (int)(instruction_pointer - frame->function->chunk.code));
     #endif
         uint8_t instruction;
         switch (instruction = READ_BYTE())
@@ -218,6 +233,7 @@ static InterpretResult run()
                 if (!IS_NUMBER(peek(0)))
                 {
                     runtimeError("Operand must be a number.");
+                    RESTORE_IP();
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 push(NUMBER_VAL(-AS_NUMBER(pop())));
@@ -237,6 +253,7 @@ static InterpretResult run()
                 else
                 {
                     runtimeError("Operants must be two numbers or two strings.");
+                    RESTORE_IP();
                     return INTERPRET_RUNTIME_ERROR;
                 }
 
@@ -274,6 +291,7 @@ static InterpretResult run()
                 if (tableSet(&vm.globals, name, peek(0))) {
                     tableDelete(&vm.globals, name);
                     runtimeError("Undefined global variable '%s'.", name->chars);
+                    RESTORE_IP();
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 break;
@@ -284,6 +302,7 @@ static InterpretResult run()
                 bool exists = tableGet(&vm.globals, name, &value);
                 if (!exists) {
                     runtimeError("Undefined global variable '%s'.", name->chars);
+                    RESTORE_IP();
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 push(value);
@@ -302,26 +321,29 @@ static InterpretResult run()
             }
             case OP_JUMP_IF_FALSE: {
                 uint16_t offset = READ_SHORT();
-                if (isFalsey(peek(0))) frame->ip += offset;
+                if (isFalsey(peek(0))) instruction_pointer += offset;
                 break;
             }
             case OP_JUMP: {
                 uint16_t offset = READ_SHORT();
-                frame->ip += offset;
+                instruction_pointer += offset;
                 break;   
             }
             case OP_LOOP: {
                 uint16_t offset = READ_SHORT();
-                frame->ip -= offset;
+                instruction_pointer -= offset;
                 break;
             }
             case OP_CALL: {
                 int argCount = READ_BYTE();
 
                 if (!callValue(peek(argCount), argCount)) {
+                    RESTORE_IP();
                     return INTERPRET_RUNTIME_ERROR;
                 }
+                RESTORE_IP();
                 frame = &vm.frames[vm.frameCount - 1];
+                instruction_pointer = frame->ip;
                 break;
             }
             case OP_RETURN   : {
@@ -331,13 +353,16 @@ static InterpretResult run()
                 if (vm.frameCount == 0)
                 {
                     pop();
+                    RESTORE_IP();
                     return INTERPRET_OK;
                 }
 
                 vm.stackTop = frame->slots;
                 push(result);
 
+                // RESTORE_IP();
                 frame = &vm.frames[vm.frameCount - 1];
+                instruction_pointer = frame->ip;
                 break;
             }
             default:
@@ -346,7 +371,7 @@ static InterpretResult run()
                
         }
     }
-
+    RESTORE_IP();
 #undef READ_BYTE
 #undef READ_CONSTANT
 #undef READ_STRING
@@ -368,10 +393,6 @@ InterpretResult interpret(const char* source)
     // Setting function and call frame
     push(OBJ_VAL(function));
     callValue(OBJ_VAL(function), 0);
-    // CallFrame* frame = &vm.frames[vm.frameCount++];
-    // frame->function = function;
-    // frame->ip = function->chunk.code;
-    // frame->slots = vm.stack;
 
     // Interpreting
     begin = clock();

@@ -1,7 +1,9 @@
-fun a() { b(); }
-fun b() { c(); }
-fun c() {
-  c("too", "many");
+fun b() { print "dans b";}
+
+fun a() { print "start a";
+
+b();
+print "end a";
 }
 
 a();

@@ -38,6 +38,7 @@ typedef Value (*NativeFn)(int argCount, Value* args);
 typedef struct {
     Obj obj;
     NativeFn function;
+    int arity;
 } ObjNative;
 
 struct sObjString {
@@ -49,7 +50,7 @@ struct sObjString {
 
 
 ObjFunction* newFunction();
-ObjNative* newNative(NativeFn function);
+ObjNative* newNative(NativeFn function, int arity);
 ObjString* copyString(const char* start, int length);
 ObjString* concatenateStrings(const ObjString* a, const ObjString* b);
 void printObject(Obj* object);
