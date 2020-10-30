@@ -48,8 +48,8 @@ typedef struct {
 } Local;
 
 typedef enum {
+    TYPE_SCRIPT,
     TYPE_FUNCTION,
-    TYPE_SCRIPT
 } FunctionType;
 
 typedef struct Compiler {
@@ -180,6 +180,7 @@ static void emitLoop(int loopStart)
 
 static void emitReturn()
 {
+    emitByte(OP_NIL);
     emitByte(OP_RETURN);
 }
 
@@ -597,7 +598,6 @@ static void function(FunctionType type)
 
     ObjFunction* function = endCompiler();
 
-    if (function->chunk.constants.values == NULL) write(1, "coucou les copains\n", strlen("coucou les copains\n"));
     emitBytes(OP_CONSTANT, makeConstant(OBJ_VAL(function)));
 
 }
@@ -783,6 +783,24 @@ static void varDeclaration()
     defineVariable(global);
 }
 
+static void returnStatement()
+{
+    if (current->type == TYPE_SCRIPT)
+    {
+        error("Can't return from top-level code");
+    }
+    if (match(TOKEN_SEMICOLON))
+    {
+        emitReturn();
+    }
+    else
+    {
+        expression();
+        consume(TOKEN_SEMICOLON, "Expect ';' after return statement");
+        emitByte(OP_RETURN);
+    }
+}
+
 static void statement()
 {
     if (match(TOKEN_PRINT))
@@ -806,6 +824,10 @@ static void statement()
     else if (match(TOKEN_FOR))
     {
         forStatement();
+    }
+    else if (match(TOKEN_RETURN))
+    {
+        returnStatement();
     }
     else
     {

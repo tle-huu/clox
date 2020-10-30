@@ -53,7 +53,13 @@ ObjFunction* newFunction()
     function->name = NULL;
     initChunk(&function->chunk);
     return function;
+}
 
+ObjNative* newNative(NativeFn function)
+{
+    ObjNative* native = ALLOCATE_OBJ(ObjNative, OBJ_NATIVE);
+    native->function = function;
+    return native;
 }
 
 ObjString* copyString(const char* chars, int length)
@@ -109,6 +115,9 @@ void printObject(Obj* object)
         case OBJ_FUNCTION:
             printFunction((ObjFunction*)object);
             break;
+        case OBJ_NATIVE:
+            printf("<native fn>");
+            break;
     }
 }
 
@@ -127,5 +136,10 @@ bool objsEqual(Obj* a, Obj* b)
         case OBJ_FUNCTION:
             return false;
             break;
+        case OBJ_NATIVE: {
+            ObjNative* aNative = (ObjNative*)a;
+            ObjNative* bNative = (ObjNative*)b;
+            return  aNative->function == bNative->function;
+        }
     }   
 }

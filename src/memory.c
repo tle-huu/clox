@@ -29,12 +29,13 @@ static void freeObject(Obj* object)
             break;
         }
         case OBJ_FUNCTION: {
-            // write(1, "DLRDLRLDR\n", 10);
             ObjFunction* function = (ObjFunction*)object;
-            // printf("dlr xxx => [%s]\n", function->name ? function->name->chars : "SCRIPTZER");
-            // printf("dlr xx arity =>[%d]\n", function->arity);
             freeChunk(&function->chunk);
             FREE(ObjFunction, function);
+            break;
+        }
+        case OBJ_NATIVE: {
+            FREE(ObjNative, object);
             break;
         }
 

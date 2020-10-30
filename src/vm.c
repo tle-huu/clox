@@ -1,6 +1,7 @@
 #include "common.h"
 #include "compiler.h"
 #include "memory.h"
+#include "object.h"
 #include "vm.h"
 #include "value.h"
 
@@ -16,6 +17,11 @@
 
 VM vm;
 
+static Value clockNative(int argCount, Value* args)
+{
+    return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
+}
+
 static void resetStack()
 {
     vm.stackTop = vm.stack;
@@ -30,7 +36,7 @@ static void runtimeError(const char* format, ...)
     va_end(args);
     fputs("\n", stderr);
 
-    for (int i = vm.frameCount - 1; i >= 0;--i)
+    for (int i = vm.frameCount - 1; i >= 0; --i)
     {
         CallFrame* frame = &vm.frames[i];
         ObjFunction* function = frame->function;
@@ -49,8 +55,21 @@ static void runtimeError(const char* format, ...)
         }
     }
 
-
     resetStack();
+}
+
+static Value peek(int distance)
+{
+    return vm.stackTop[-1 - distance];
+}
+
+static void defineNative(const char* name, NativeFn function)
+{
+    push(OBJ_VAL(copyString(name, (int)strlen(name))));
+    push(OBJ_VAL(newNative(function)));
+    tableSet(&vm.globals, AS_STRING(peek(1)), peek(0));
+    pop();
+    pop();
 }
 
 void initVM()
@@ -59,6 +78,8 @@ void initVM()
     initTable(&vm.strings);
     initTable(&vm.globals);
     vm.objects = NULL;
+
+    defineNative("clock", clockNative);
 }
 
 void freeVM()
@@ -86,10 +107,6 @@ Value pop()
 }
 
 
-static Value peek(int distance)
-{
-    return vm.stackTop[-1 - distance];
-}
 
 static bool isFalsey(Value value)
 {
@@ -132,10 +149,19 @@ static bool call(ObjFunction* function, uint8_t argCount)
 static bool callValue(Value callee, int argCount)
 {
     if (IS_OBJ(callee)) {
+
         switch (OBJ_TYPE(callee))
         {
             case OBJ_FUNCTION:
                 return call(AS_FUNCTION(callee), argCount);
+            case OBJ_NATIVE: {
+                NativeFn native = AS_NATIVE(callee);
+                Value result = native(argCount, vm.stackTop - argCount);
+                vm.stackTop -= argCount + 1;
+                push(result);
+                return true;
+            }
+            case OBJ_STRING:
             default:
                 break;
         }
@@ -298,9 +324,22 @@ static InterpretResult run()
                 frame = &vm.frames[vm.frameCount - 1];
                 break;
             }
-            case OP_RETURN   :
-                // Exit interpreter
-                return INTERPRET_OK;
+            case OP_RETURN   : {
+                Value result = pop();
+                vm.frameCount--;
+
+                if (vm.frameCount == 0)
+                {
+                    pop();
+                    return INTERPRET_OK;
+                }
+
+                vm.stackTop = frame->slots;
+                push(result);
+
+                frame = &vm.frames[vm.frameCount - 1];
+                break;
+            }
             default:
                 printf("Unknown op code: [%u]\n", instruction);
                 break;
@@ -320,17 +359,19 @@ InterpretResult interpret(const char* source)
     // Compiling
     clock_t begin = clock();
     ObjFunction* function = compile(source);
+
     if (function == NULL) return INTERPRET_COMPILE_ERROR;
+
     clock_t end = clock();
     printf("Compile time: %f seconds\n", (double)(end - begin) / CLOCKS_PER_SEC);
 
     // Setting function and call frame
     push(OBJ_VAL(function));
     callValue(OBJ_VAL(function), 0);
-    CallFrame* frame = &vm.frames[vm.frameCount++];
-    frame->function = function;
-    frame->ip = function->chunk.code;
-    frame->slots = vm.stack;
+    // CallFrame* frame = &vm.frames[vm.frameCount++];
+    // frame->function = function;
+    // frame->ip = function->chunk.code;
+    // frame->slots = vm.stack;
 
     // Interpreting
     begin = clock();

@@ -25,9 +25,7 @@ static int jumpInstruction(const char* name, int sign, Chunk const* chunk, int o
 static int constantInstruction(const char *name, Chunk const * chunk, int offset)
 {
     uint8_t constantOffset = chunk->code[offset + 1];
-    printf("xxxxxx %d\n", constantOffset);
     printf("%-16s %4d '", name, constantOffset);
-    if (chunk->constants.values == NULL ) write(1, "\nprobleme\n", strlen("\nprobleme\n"));
     printValue(chunk->constants.values[constantOffset]);
     printf("'\n");
     return offset + 2;
